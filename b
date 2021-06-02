@@ -3,18 +3,10 @@
 """ Generate directory listing to index.html recursively for the top directory
 given in commandline argument.
 
-First, it changes directory mode:
-    1. by default all have go=rX
-    2. this tool is go-rwx
-    3. all .brc files are go-rwx
+Hidden files and directories are not included in the listing. The resulting
+directory listings are sorted and listed. For sorting:
 
-Then following inclusion rules are applied:
-    1. cannot be hidden files
-    2. file must have o+r
-    3. directory must have o+x
-
-The resulting directory listings are sorted and listed. For sorting:
-    1. directories fitst, then files
+    1. directories first, then files
     2. then sort by names
 
 The directory listings are written to index.html with footer and headers. The
@@ -25,6 +17,11 @@ Python file that should define following variables:
     - FOOTER: a string representing the content to show after the listing
 
 Note that index.html are wrapped in a <pre> tag.
+
+Finally, it changes directory mode:
+    1. by default all have go=rX
+    2. this tool is go-rwx
+    3. all .brc files are go-rwx
 """
 
 import datetime as dt
@@ -136,13 +133,19 @@ def include_item_non_hidden(item):
 
 def include_item(item):
     return all([f(item) for f in [
-        include_item_on_mode,
+        # include_item_on_mode,
         include_item_non_hidden
     ]])
 
 
 def chmod(d, this_tool):
-    sp.check_call(f"chmod -R go=rX {d}", shell=True)
+    # it's supposed to set directory to go=x, but without `r`, tilde.town
+    # seems to not redirect tilde.town/~user into tilde.town/~user/, resulting
+    # in a 404 error. So, switching it back to go=rx. THIS MEANS, LOCAL USERS
+    # CAN LIST THE DIRECTORY CONTENT:
+    # sp.check_call(f"find {d} -type d -print0 | xargs -0 chmod go=x", shell=True)
+    sp.check_call(f"find {d} -type d -print0 | xargs -0 chmod go=rx", shell=True)
+    sp.check_call(f"find {d} -type f -print0 | xargs -0 chmod go=r", shell=True)
     sp.check_call(f"chmod go-rwx \"{this_tool}\"", shell=True)
     sp.check_call(
         _P(f"find {d} -type f -name \"{BRC}\" -print0 | xargs -0 chmod go-rwx"),
@@ -152,8 +155,8 @@ def chmod(d, this_tool):
 
 if __name__ == "__main__":
     curdir = sys.argv[1] if len(sys.argv) > 1 else "."
-    chmod(curdir, sys.argv[0])
     make_index(curdir)
+    chmod(curdir, sys.argv[0])
 
 
 # vim: set ft=python tw=80 cc=80
