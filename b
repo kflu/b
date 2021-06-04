@@ -15,6 +15,7 @@ Python file that should define following variables:
 
     - HEADER: a string representing the content to show before the listing
     - FOOTER: a string representing the content to show after the listing
+    - SORT_ITEMS: a list[str] -> list[str] func to sort directory items
 
 Note that index.html are wrapped in a <pre> tag.
 
@@ -36,15 +37,20 @@ INDEX = f"index.html"
 
 def _P(x):
     """Print and return. Used for debugging"""
-    #print(x)
+    # print(x)
     return x
 
 
-def listdir(d):
+def listdir(d, sort_items=None):
     __ = os.listdir(d)
     # Below two lines sort by dir THEN name (stable sort)
-    __ = sorted(__, key=lambda x: x)
-    __ = sorted(__, key=lambda x: 0 if os.path.isdir(x) else 1)
+
+    if sort_items:
+        __ = sort_items(__)
+    else:
+        __ = sorted(__, key=lambda x: x)
+        __ = sorted(__, key=lambda x: 0 if os.path.isdir(x) else 1)
+
     __ = [x for x in __ if include_item(x)]
     __ = [f"{x}/" if os.path.isdir(x) else x for x in __]
     return __
@@ -53,9 +59,11 @@ def listdir(d):
 def gen_render_index(items):
 
     for x in items:
+        stat = os.stat(x)
         dtstr = (dt.datetime
-                   .fromtimestamp(os.stat(x).st_mtime)
-                   .isoformat())
+                   .fromtimestamp(stat.st_mtime)
+                   .isoformat(timespec="seconds"))
+        size = stat.st_size
 
         if x != "index.html":
             link = f"<a href=\"{x}\">{x}</a>"
@@ -63,7 +71,7 @@ def gen_render_index(items):
             pad = 25 - len(x)
             pad = 40 - len(x) if pad < 0 else pad
             pad = 4           if pad < 0 else pad
-            line = f"{link}{' '*pad}{dtstr}"
+            line = _P(f"{link}{' '*pad}{dtstr.ljust(22)}{str(size).rjust(6)}")
             yield line
 
 
@@ -75,10 +83,10 @@ def make_index(d):
     try:
 
         # read directory config
-        config={"HEADER":"", "FOOTER":""}
+        config={"HEADER":"", "FOOTER":"", "SORT_ITEMS":None}
         if os.path.exists(BRC):
             try:
-                exec(open(BRC, "r").read(), {}, config)
+                exec(open(BRC, "r").read(), globals(), config)
             except Exception as e:
                 print(f"Error executing {BRC}: {e}")
 
@@ -90,7 +98,7 @@ def make_index(d):
         lines = [
             "<pre>",
             config["HEADER"],
-            *gen_render_index(listdir(".")),
+            *gen_render_index(listdir(".", config["SORT_ITEMS"])),
             config["FOOTER"],
             "</pre>",
         ]
